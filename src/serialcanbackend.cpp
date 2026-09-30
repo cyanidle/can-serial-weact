@@ -2,6 +2,7 @@
 
 #include "slcan.h"
 
+#include <QElapsedTimer>
 #include <QEventLoop>
 #include <QLoggingCategory>
 #include <QSerialPortInfo>
@@ -16,6 +17,9 @@ Q_LOGGING_CATEGORY(serialcanLog, "qt.canbus.plugins.serialcan-weact")
 namespace {
 
 constexpr int CommandTimeoutMs = 500;
+// The unterminated error register answer counts as complete once no byte arrived for this long.
+constexpr int AnswerSettleMs = 150;
+constexpr int MaxErrorRegisterDigits = 8;
 constexpr quint16 WeActVendorId = 0x0483;
 constexpr quint16 WeActProductId = 0x5740;
 constexpr quint32 StandardIdMask = 0x7ff;
@@ -34,9 +38,8 @@ bool isValidRawCode(const QByteArray &code, char prefix)
     return true;
 }
 
-// The answer to `E` has no terminator, so both the reader and the drain path have to
-// locate "CANable Error Register: <hex>" inside the receive buffer the same way. Returns
-// the offset of the value (or -1 when the prefix is not there) and the digit count.
+// The answer to `E` has no terminator, so the reader and the drain path have to locate
+// "CANable Error Register: <hex>" inside the receive buffer the same way.
 int findErrorRegister(const QByteArray &buffer, int &digits)
 {
     const int start = buffer.indexOf(ErrorRegisterPrefix);
@@ -44,8 +47,10 @@ int findErrorRegister(const QByteArray &buffer, int &digits)
         return -1;
     const int valueStart = start + ErrorRegisterPrefix.size();
     int count = 0;
-    while (valueStart + count < buffer.size() && weact::slcan::isHexDigit(buffer.at(valueStart + count)))
+    while (count < MaxErrorRegisterDigits && valueStart + count < buffer.size()
+        && weact::slcan::isHexDigit(buffer.at(valueStart + count))) {
         ++count;
+    }
     digits = count;
     return valueStart;
 }
@@ -429,21 +434,26 @@ bool SerialCanBackend::readErrorRegister(quint32 &value, int timeoutMs)
         return false;
 
     bool found = false;
-    int seenDigits = -1;
+    QElapsedTimer quiet;
+    quiet.start();
+    int lastSize = m_buffer.size();
     QEventLoop loop;
     QTimer timeout;
     QTimer poll;
     timeout.setSingleShot(true);
     poll.setInterval(10);
     connect(&poll, &QTimer::timeout, this, [&] {
+        if (m_buffer.size() != lastSize) {
+            lastSize = m_buffer.size();
+            quiet.restart();
+            return;
+        }
         int digits = 0;
         const int valueStart = findErrorRegister(m_buffer, digits);
         if (valueStart < 0 || digits == 0)
             return;
-        if (digits != seenDigits) {
-            seenDigits = digits;
+        if (quiet.elapsed() < AnswerSettleMs)
             return;
-        }
         bool ok = false;
         const quint32 parsed = m_buffer.mid(valueStart, digits).toUInt(&ok, 16);
         if (!ok)
