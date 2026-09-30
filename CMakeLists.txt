@@ -59,4 +59,9 @@ if (SERIALCAN_BUILD_TESTS)
     add_executable(serialcan_probe tests/probe.cpp src/serialcanbackend.cpp src/slcan.cpp)
     target_include_directories(serialcan_probe PRIVATE src)
     target_link_libraries(serialcan_probe PRIVATE Qt6::Core Qt6::SerialPort Qt6::SerialBus)
+
+    # Needs a live bus with a second node, so it is built but not registered with ctest.
+    add_executable(serialcan_classic_test tests/classic_can_test.cpp src/serialcanbackend.cpp src/slcan.cpp)
+    target_include_directories(serialcan_classic_test PRIVATE src)
+    target_link_libraries(serialcan_classic_test PRIVATE Qt6::Core Qt6::SerialPort Qt6::SerialBus)
 endif()
