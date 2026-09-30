@@ -33,11 +33,6 @@ bool sameBitrate(quint32 requested, quint32 candidate)
     return requested >= candidate - tolerance && requested <= candidate + tolerance;
 }
 
-bool isHexDigit(char c)
-{
-    return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
-}
-
 int hexValue(char c)
 {
     if (c >= '0' && c <= '9')
@@ -61,11 +56,6 @@ std::optional<quint32> hexValue(const QByteArray &text)
         value = (value << 4) | quint32(digit);
     }
     return value;
-}
-
-QByteArray hex(quint32 value, int digits)
-{
-    return QByteArray::number(value, 16).rightJustified(digits, '0').toUpper();
 }
 
 char dlcChar(quint8 dlc)
@@ -111,6 +101,16 @@ std::optional<QChar> codeFor(const CodeTable &table, quint32 bitrate)
     return std::nullopt;
 }
 
+}
+
+bool isHexDigit(char c)
+{
+    return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
+}
+
+QByteArray hexText(quint32 value, int digits)
+{
+    return QByteArray::number(value, 16).rightJustified(digits, '0').toUpper();
 }
 
 quint8 dlcToLength(quint8 dlc)
@@ -178,7 +178,7 @@ QByteArray encode(const QCanBusFrame &frame, QString &error)
     QByteArray command;
     command.reserve(1 + 8 + 1 + 2 * 64 + 1);
     command.append(type);
-    command.append(hex(frame.frameId(), extended ? 8 : 3));
+    command.append(hexText(frame.frameId(), extended ? 8 : 3));
 
     if (remote) {
         const auto dlc = lengthToDlc(payload.size());

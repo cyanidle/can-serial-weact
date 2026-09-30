@@ -38,7 +38,7 @@ int main(int argc, char **argv)
     const quint32 data = argc > 3 ? quint32(QByteArray(argv[3]).toUInt()) : 0U;
 
     QString error;
-    QCanBusDevice *device = QCanBus::instance()->createDevice(QStringLiteral("serialcan"), port, &error);
+    QCanBusDevice *device = QCanBus::instance()->createDevice(QStringLiteral("serialcan-weact"), port, &error);
     if (!device) {
         std::fprintf(stderr, "createDevice failed: %s\n", qPrintable(error));
         return 1;
@@ -84,6 +84,11 @@ int main(int argc, char **argv)
     }
     std::printf("connected: %s\n", qPrintable(device->deviceInfo().description()));
     std::printf("bus status: %d\n", int(device->busStatus()));
+
+    if (argc > 5 && QByteArray(argv[5]) == "fd-toggle") {
+        device->setConfigurationParameter(QCanBusDevice::CanFdKey, QVariant(true));
+        std::printf("enabled CanFdKey after connecting\n");
+    }
 
     QCanBusFrame frame;
     frame.setFrameId(0x123);

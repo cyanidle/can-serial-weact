@@ -21,7 +21,7 @@ target_link_libraries(serialcan PRIVATE Qt6::Core Qt6::SerialPort Qt6::SerialBus
 
 set_target_properties(serialcan PROPERTIES
     PREFIX ""
-    OUTPUT_NAME "serialcan"
+    OUTPUT_NAME "serialcan-weact"
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/canbus"
 )
 

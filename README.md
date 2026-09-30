@@ -5,7 +5,7 @@ An out-of-tree [QCanBus](https://doc.qt.io/qt-6/qtcanbus-backends.html) plugin t
 including **CAN FD**.
 
 ```
-QCanBus::createDevice("serialcan", "/dev/ttyACM1")
+QCanBus::createDevice("serialcan-weact", "/dev/ttyACM1")
 ```
 
 ## Why this exists
@@ -28,7 +28,7 @@ cmake --build build -j $(nproc)
 ctest --test-dir build --output-on-failure     # protocol codec self-test
 ```
 
-The plugin lands in `build/canbus/serialcan.so` (a `canbus/` subdirectory is what Qt's plugin
+The plugin lands in `build/canbus/serialcan-weact.so` (a `canbus/` subdirectory is what Qt's plugin
 loader scans).
 
 ### Use it from a build tree
@@ -55,7 +55,7 @@ reports the matching plugin directory.
 #include <QCanBusDevice>
 
 QString error;
-QCanBusDevice *device = QCanBus::instance()->createDevice("serialcan", "/dev/ttyACM1", &error);
+QCanBusDevice *device = QCanBus::instance()->createDevice("serialcan-weact", "/dev/ttyACM1", &error);
 
 device->setConfigurationParameter(QCanBusDevice::BitRateKey, 500000);
 device->setConfigurationParameter(QCanBusDevice::CanFdKey, true);
@@ -79,7 +79,7 @@ fd.setBitrateSwitch(true);
 device->writeFrame(fd);
 ```
 
-Discovery: `QCanBus::availableDevices("serialcan")` lists serial ports that look like this
+Discovery: `QCanBus::availableDevices("serialcan-weact")` lists serial ports that look like this
 device (USB vendor/product `0483:5740`, or a description mentioning USB2CAN/SLCAN/CANable/WeAct).
 `createDevice()` also accepts any existing serial port path (e.g. a symlink), so a device that
 is not auto-detected can still be used explicitly.
@@ -100,7 +100,10 @@ is not auto-detected can still be used explicitly.
 | `DataBitrateCodeKey` (`UserKey + 4`) | Raw data phase code, e.g. `"Y5"` or `"Y0902"` |
 
 All of these except `CanFdKey` must be set **before** `connectDevice()`; changing them on a
-connected device is rejected.
+connected device is rejected. `CanFdKey` is a client-side policy (it decides whether FD frames
+are written and delivered) and takes effect immediately, but the CAN FD data phase bit rate
+(`DataBitRateKey`) is programmed into the device at connect time, so enabling FD on a live
+device only changes the framing, not the device timing.
 
 `hasBusStatus()` / `busStatus()` are implemented through the firmware's `E` command (CAN error
 register). `resetController()` restarts the CAN channel with `C` + `O`.

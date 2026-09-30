@@ -25,6 +25,10 @@ inline constexpr int DataSeg2Max = 0x10;
 inline constexpr int MaxClassicPayload = 8;
 inline constexpr int MaxFdPayload = 64;
 
+bool isHexDigit(char c);
+
+QByteArray hexText(quint32 value, int digits);
+
 quint8 dlcToLength(quint8 dlc);
 std::optional<quint8> lengthToDlc(int length);
 

@@ -11,7 +11,7 @@
 
 #include <optional>
 
-Q_LOGGING_CATEGORY(serialcanLog, "qt.canbus.plugins.serialcan")
+Q_LOGGING_CATEGORY(serialcanLog, "qt.canbus.plugins.serialcan-weact")
 
 namespace {
 
@@ -23,22 +23,12 @@ constexpr quint32 ExtendedIdMask = 0x1fffffff;
 
 const QByteArray ErrorRegisterPrefix = QByteArrayLiteral("CANable Error Register: ");
 
-QByteArray hexText(quint32 value, int digits)
-{
-    return QByteArray::number(value, 16).rightJustified(digits, '0').toUpper();
-}
-
-bool isHexDigit(char c)
-{
-    return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
-}
-
 bool isValidRawCode(const QByteArray &code, char prefix)
 {
     if (code.size() < 2 || code.size() > 7 || code.at(0) != prefix)
         return false;
     for (int i = 1; i < code.size(); ++i) {
-        if (!isHexDigit(code.at(i)))
+        if (!weact::slcan::isHexDigit(code.at(i)))
             return false;
     }
     return true;
@@ -101,7 +91,7 @@ QList<QCanBusDeviceInfo> SerialCanBackend::interfaces()
     for (const QSerialPortInfo &info : ports) {
         if (!looksLikeSlcanDevice(info))
             continue;
-        result.append(createDeviceInfo(QStringLiteral("serialcan"), info.systemLocation(),
+        result.append(createDeviceInfo(QStringLiteral("serialcan-weact"), info.systemLocation(),
             info.serialNumber(), describePort(info), info.portName(), 0, false, true));
     }
     return result;
@@ -187,7 +177,7 @@ QString SerialCanBackend::interpretErrorFrame(const QCanBusFrame &errorFrame)
 
 QCanBusDeviceInfo SerialCanBackend::deviceInfo() const
 {
-    return createDeviceInfo(QStringLiteral("serialcan"), m_name, m_serialNumber,
+    return createDeviceInfo(QStringLiteral("serialcan-weact"), m_name, m_serialNumber,
         m_description.isEmpty() ? describePort(QSerialPortInfo(m_name)) : m_description,
         QSerialPortInfo(m_name).portName(), 0, false, true);
 }
@@ -287,6 +277,9 @@ void SerialCanBackend::setConfigurationParameter(ConfigurationKey key, const QVa
             .arg(int(key), 0, 16));
         return;
     }
+
+    if (key == QCanBusDevice::CanFdKey)
+        m_fdEnabled = value.toBool();
 
     QCanBusDevice::setConfigurationParameter(key, value);
 }
@@ -411,6 +404,11 @@ bool SerialCanBackend::command(const QByteArray &bytes, int timeoutMs)
 
 bool SerialCanBackend::readErrorRegister(quint32 &value, int timeoutMs)
 {
+    // The firmware drops input while it is busy with a transmission, and its answer to `E`
+    // has no terminator, so the request is only sent from an idle command stream.
+    if (m_commandInFlight || m_waitingReply)
+        return false;
+
     if (m_port.write(QByteArrayLiteral("E\r")) < 0)
         return false;
 
@@ -426,7 +424,7 @@ bool SerialCanBackend::readErrorRegister(quint32 &value, int timeoutMs)
             return;
         const int digits = start + ErrorRegisterPrefix.size();
         int count = 0;
-        while (digits + count < m_buffer.size() && isHexDigit(m_buffer.at(digits + count)))
+        while (digits + count < m_buffer.size() && weact::slcan::isHexDigit(m_buffer.at(digits + count)))
             ++count;
         if (count == 0)
             return;
@@ -443,6 +441,15 @@ bool SerialCanBackend::readErrorRegister(quint32 &value, int timeoutMs)
     poll.start();
     timeout.start(timeoutMs);
     loop.exec();
+
+    if (!found) {
+        const int start = m_buffer.indexOf(ErrorRegisterPrefix);
+        if (start >= 0) {
+            if (start > 0)
+                m_buffer.remove(0, start);
+            m_buffer.remove(0, qMin(ErrorRegisterPrefix.size(), m_buffer.size()));
+        }
+    }
     return found;
 }
 
@@ -572,9 +579,11 @@ bool SerialCanBackend::configureFilters()
     }
 
     const QByteArray standardCommand = QByteArrayLiteral("f")
-        + hexText(standard ? standard->frameId : 0, 3) + hexText(standard ? standard->frameIdMask : 0, 3);
+        + weact::slcan::hexText(standard ? standard->frameId : 0, 3)
+        + weact::slcan::hexText(standard ? standard->frameIdMask : 0, 3);
     const QByteArray extendedCommand = QByteArrayLiteral("F")
-        + hexText(extended ? extended->frameId : 0, 8) + hexText(extended ? extended->frameIdMask : 0, 8);
+        + weact::slcan::hexText(extended ? extended->frameId : 0, 8)
+        + weact::slcan::hexText(extended ? extended->frameIdMask : 0, 8);
 
     if (!command(standardCommand + '\r') || !command(extendedCommand + '\r'))
         return fail(tr("%1 rejected the identifier filters").arg(m_name));
