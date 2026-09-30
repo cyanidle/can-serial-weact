@@ -48,6 +48,22 @@ directory, e.g. `/usr/lib/x86_64-linux-gnu/qt6/plugins/canbus`); `-D SERIALCAN_P
 overrides it. Configure with the same `CMAKE_INSTALL_PREFIX` you later install with, so Qt
 reports the matching plugin directory.
 
+### Debian package
+
+```bash
+cmake -B build-deb -G Ninja -D CMAKE_BUILD_TYPE=Release -D CMAKE_INSTALL_PREFIX=/usr \
+      -D SERIALCAN_BUILD_TESTS=OFF
+cmake --build build-deb -j $(nproc)
+(cd build-deb && cpack -G DEB)                 # qcanbus-serialcan-weact_<version>_<arch>.deb
+sudo dpkg -i build-deb/qcanbus-serialcan-weact_*.deb
+```
+
+The package installs `serialcan-weact.so` into the default Qt plugin directory
+(`/usr/lib/<triplet>/qt6/plugins/canbus/`), so every QCanBus application picks it up with no
+`QT_PLUGIN_PATH` needed. Dependencies are derived by `dpkg-shlibdeps`
+(libqt6core6t64/libqt6serialbus6/libqt6serialport6); the maintainer field defaults to
+`-D SERIALCAN_DEB_MAINTAINER="Name <mail>"`.
+
 ## Use
 
 ```cpp

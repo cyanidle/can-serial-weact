@@ -34,6 +34,22 @@ bool isValidRawCode(const QByteArray &code, char prefix)
     return true;
 }
 
+// The answer to `E` has no terminator, so both the reader and the drain path have to
+// locate "CANable Error Register: <hex>" inside the receive buffer the same way. Returns
+// the offset of the value (or -1 when the prefix is not there) and the digit count.
+int findErrorRegister(const QByteArray &buffer, int &digits)
+{
+    const int start = buffer.indexOf(ErrorRegisterPrefix);
+    if (start < 0)
+        return -1;
+    const int valueStart = start + ErrorRegisterPrefix.size();
+    int count = 0;
+    while (valueStart + count < buffer.size() && weact::slcan::isHexDigit(buffer.at(valueStart + count)))
+        ++count;
+    digits = count;
+    return valueStart;
+}
+
 QString describePort(const QSerialPortInfo &info)
 {
     QStringList parts;
@@ -413,26 +429,26 @@ bool SerialCanBackend::readErrorRegister(quint32 &value, int timeoutMs)
         return false;
 
     bool found = false;
+    int seenDigits = -1;
     QEventLoop loop;
     QTimer timeout;
     QTimer poll;
     timeout.setSingleShot(true);
     poll.setInterval(10);
     connect(&poll, &QTimer::timeout, this, [&] {
-        const int start = m_buffer.indexOf(ErrorRegisterPrefix);
-        if (start < 0)
+        int digits = 0;
+        const int valueStart = findErrorRegister(m_buffer, digits);
+        if (valueStart < 0 || digits == 0)
             return;
-        const int digits = start + ErrorRegisterPrefix.size();
-        int count = 0;
-        while (digits + count < m_buffer.size() && weact::slcan::isHexDigit(m_buffer.at(digits + count)))
-            ++count;
-        if (count == 0)
+        if (digits != seenDigits) {
+            seenDigits = digits;
             return;
+        }
         bool ok = false;
-        const quint32 parsed = m_buffer.mid(digits, count).toUInt(&ok, 16);
+        const quint32 parsed = m_buffer.mid(valueStart, digits).toUInt(&ok, 16);
         if (!ok)
             return;
-        m_buffer.remove(0, digits + count);
+        m_buffer.remove(0, valueStart + digits);
         value = parsed;
         found = true;
         loop.quit();
@@ -443,12 +459,10 @@ bool SerialCanBackend::readErrorRegister(quint32 &value, int timeoutMs)
     loop.exec();
 
     if (!found) {
-        const int start = m_buffer.indexOf(ErrorRegisterPrefix);
-        if (start >= 0) {
-            if (start > 0)
-                m_buffer.remove(0, start);
-            m_buffer.remove(0, qMin(ErrorRegisterPrefix.size(), m_buffer.size()));
-        }
+        int digits = 0;
+        const int valueStart = findErrorRegister(m_buffer, digits);
+        if (valueStart >= 0)
+            m_buffer.remove(0, valueStart + digits);
     }
     return found;
 }

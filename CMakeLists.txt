@@ -34,6 +34,21 @@ install(TARGETS serialcan
     LIBRARY DESTINATION "${SERIALCAN_PLUGIN_DIR}"
 )
 
+set(SERIALCAN_DEB_MAINTAINER "Alexej <alexej@localhost>"
+    CACHE STRING "Maintainer of the generated DEB package")
+
+set(CPACK_GENERATOR "DEB")
+set(CPACK_PACKAGE_NAME "qcanbus-serialcan-weact")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "QCanBus plugin for the WeAct USB2CANFDV2 SLCAN firmware")
+set(CPACK_PACKAGE_DESCRIPTION "Out-of-tree QCanBus plugin (key: serialcan-weact) that talks the WeAct SLCAN firmware over USB CDC serial, including CAN FD, bit rates, identifier filters and the firmware's normal/silent modes.")
+set(CPACK_PACKAGE_CONTACT "${SERIALCAN_DEB_MAINTAINER}")
+set(CPACK_DEBIAN_PACKAGE_SECTION "libs")
+set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
+set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+include(CPack)
+
 if (SERIALCAN_BUILD_TESTS)
     enable_testing()
     add_executable(slcan_codec_test tests/codec_test.cpp src/slcan.cpp)
